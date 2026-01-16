@@ -5,6 +5,12 @@ import os
 from recommendation import recommend_courses
 from data_processor import process_input
 from sentiment_analyzer import analyze_sentiment
+import nltk
+
+#-------------------------------------
+#for nltk libraries
+nltk.download("punkt", quiet=True)
+nltk.download("stopwords", quiet=True)
 
 # ----------------------------------
 # App setup
