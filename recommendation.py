@@ -1,12 +1,16 @@
 import pandas as pd
 import numpy as np
+import ast
+import os
+import math
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sentiment_analyzer import SentimentAnalyzer
-import ast
-import os
 
-# ✅ REQUIRED FOR RENDER (TEMP FS)
+# ======================================================
+# ✅ REQUIRED FOR RENDER (TEMP FILESYSTEM SAFE)
+# ======================================================
 os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface"
 os.environ["HF_HOME"] = "/tmp/huggingface"
 
@@ -14,16 +18,40 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModel
 
 
+# ======================================================
+# 🔒 JSON SANITIZER (CRITICAL FIX)
+# ======================================================
+def sanitize_json(obj):
+    """
+    Recursively remove NaN / Inf values so Flask can return valid JSON
+    """
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0
+        return obj
+    if isinstance(obj, dict):
+        return {k: sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_json(i) for i in obj]
+    return obj
+
+
+# ======================================================
+# 🧠 COURSE RECOMMENDER
+# ======================================================
 class CourseRecommender:
     def __init__(self, data_processor):
         self.data_processor = data_processor
         self.sentiment_analyzer = SentimentAnalyzer(use_distilroberta=False)
-        self.vectorizer = TfidfVectorizer(max_features=1000, stop_words="english")
+        self.vectorizer = TfidfVectorizer(
+            max_features=1000,
+            stop_words="english"
+        )
         self.df = data_processor.get_course_data()
         self.prepare_features()
 
     def prepare_features(self):
-        """Prepare TF-IDF features"""
+        """Prepare TF-IDF matrix"""
         if self.df.empty:
             self.tfidf_matrix = None
             return
@@ -36,7 +64,7 @@ class CourseRecommender:
             self.tfidf_matrix = None
 
     def parse_comments(self, comments_str):
-        """Parse comments column safely"""
+        """Safely parse comments"""
         if pd.isna(comments_str) or comments_str == "":
             return []
 
@@ -65,7 +93,9 @@ class CourseRecommender:
 
         filtered_df = self.df.copy()
 
-        # Payment filter
+        # -----------------------------
+        # Filters
+        # -----------------------------
         if is_paid.lower() == "paid":
             filtered_df = filtered_df[
                 filtered_df["is_paid"].str.lower() == "paid"
@@ -75,7 +105,6 @@ class CourseRecommender:
                 filtered_df["is_paid"].str.lower() == "free"
             ]
 
-        # Rating filter
         filtered_df = filtered_df[
             filtered_df["course_rating"] >= min_rating
         ]
@@ -85,17 +114,21 @@ class CourseRecommender:
 
         results = []
 
-        for idx, row in filtered_df.iterrows():
+        # -----------------------------
+        # Scoring
+        # -----------------------------
+        for _, row in filtered_df.iterrows():
             score = 0.0
 
             # 1️⃣ Rating (30%)
-            rating_score = row["course_rating"] / 5.0
-            score += rating_score * 0.30
+            rating = row.get("course_rating", 0)
+            rating = 0 if pd.isna(rating) else float(rating)
+            score += (rating / 5.0) * 0.30
 
             # 2️⃣ Text similarity (40%)
             if course_query:
                 user_query = f"{course_query} {user_comments}"
-                course_text = f"{row['course_name']} {row.get('instructor', '')}"
+                course_text = f"{row.get('course_name', '')} {row.get('instructor', '')}"
 
                 try:
                     q_vec = self.vectorizer.transform([user_query])
@@ -119,14 +152,20 @@ class CourseRecommender:
                 sentiment_score = 0.5
                 score += 0.15
 
+            # -----------------------------
+            # Enrollment (🚨 FIXED)
+            # -----------------------------
+            enrollment = row.get("Number_of_student_enrolled", 0)
+            enrollment = 0 if pd.isna(enrollment) else int(enrollment)
+
             results.append({
-                "course_id": row["course_id"],
-                "course_name": row["course_name"],
-                "course_rating": row["course_rating"],
+                "course_id": row.get("course_id", ""),
+                "course_name": row.get("course_name", "Unknown"),
+                "course_rating": round(rating, 2),
                 "instructor": row.get("instructor", "N/A"),
                 "platform": row.get("platform", "N/A"),
-                "is_paid": row["is_paid"],
-                "enrollment": row.get("Number_of_student_enrolled", "N/A"),
+                "is_paid": row.get("is_paid", "Unknown"),
+                "enrollment": enrollment,
                 "sentiment_score": round(sentiment_score, 3),
                 "final_score": round(score, 3)
             })
@@ -136,15 +175,14 @@ class CourseRecommender:
 
 
 # ======================================================
-# ✅ FLASK / API WRAPPER (THIS FIXES YOUR ERROR)
+# 🚀 FLASK-SAFE WRAPPER (USED BY app.py)
 # ======================================================
-
 _recommender_instance = None
 
 def recommend_courses(dataset_path, filters, sentiment=None, top_n=10):
     """
-    Flask-safe wrapper
-    This is what app.py imports
+    Flask entry-point function
+    app.py imports THIS
     """
 
     global _recommender_instance
@@ -154,7 +192,9 @@ def recommend_courses(dataset_path, filters, sentiment=None, top_n=10):
         processor = DataProcessor(dataset_path)
         _recommender_instance = CourseRecommender(processor)
 
-    return _recommender_instance.get_recommendations(
+    raw_results = _recommender_instance.get_recommendations(
         user_input=filters,
         top_n=top_n
     )
+
+    return sanitize_json(raw_results)
