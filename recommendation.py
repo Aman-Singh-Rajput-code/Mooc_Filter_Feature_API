@@ -4,6 +4,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sentiment_analyzer import SentimentAnalyzer
 import ast
+import os
+
+# ✅ REQUIRED FOR RENDER
+os.environ["TRANSFORMERS_CACHE"] = "/tmp/huggingface"
+os.environ["HF_HOME"] = "/tmp/huggingface"
+
+from sentence_transformers import SentenceTransformer
+from transformers import AutoTokenizer, AutoModel
+
 
 class CourseRecommender:
     def __init__(self, data_processor):
