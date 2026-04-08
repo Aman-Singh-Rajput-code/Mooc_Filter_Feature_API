@@ -7,12 +7,23 @@ from recommendation import recommend_courses
 from data_processor import process_input
 from sentiment_analyzer import analyze_sentiment
 
-# NLTK
+# NLTK downloads
 nltk.download("punkt", quiet=True)
 nltk.download("stopwords", quiet=True)
 
 app = Flask(__name__)
-CORS(app)
+
+# ✅ FIXED CORS (VERY IMPORTANT)
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# ✅ HANDLE PREFLIGHT REQUESTS (CRITICAL FOR RENDER)
+@app.after_request
+def after_request(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    return response
+
 
 DATASET_PATH = "output.csv"
 
@@ -20,6 +31,9 @@ if not os.path.exists(DATASET_PATH):
     raise FileNotFoundError("output.csv not found")
 
 
+# ------------------------------
+# HEALTH CHECK
+# ------------------------------
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({
@@ -28,15 +42,27 @@ def health():
     })
 
 
-@app.route("/filter-courses", methods=["POST"])
+# ------------------------------
+# MAIN API
+# ------------------------------
+@app.route("/filter-courses", methods=["POST", "OPTIONS"])
 def filter_courses():
+
+    # ✅ Handle preflight request
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "JSON body required"}), 400
 
+    # Process input
     processed = process_input(data)
+
+    # Sentiment
     sentiment = analyze_sentiment(processed.get("course_name", ""))
 
+    # Recommendation
     results = recommend_courses(
         dataset_path=DATASET_PATH,
         filters=processed,
@@ -44,43 +70,47 @@ def filter_courses():
         top_n=data.get("top_n", 10)
     )
 
-    # 🔥 NEW: Transform results for visualization
+    # ------------------------------
+    # 🔥 TRANSFORM RESULTS
+    # ------------------------------
     enhanced_results = []
 
     for course in results:
         enhanced_results.append({
             "course_name": course.get("title", ""),
-            "similarity": float(course.get("similarity", 0)),  # IMPORTANT
+            "similarity": float(course.get("similarity", 0)),
             "rating": float(course.get("rating", 0)),
-            "duration": course.get("duration", "N/A"),
-            "level": course.get("level", "N/A"),
-
-            # 🔥 Optional: extract skills (simple version)
+            "platform": course.get("platform", "N/A"),
+            "is_paid": course.get("is_paid", "Unknown"),
             "skills": course.get("skills", []),
 
-            # 🔥 Explainability (VERY IMPORTANT)
-            "why_recommended": f"Matches your interest with similarity score {round(course.get('similarity', 0), 2)}"
+            # Explainability
+            "why_recommended": f"Matches your interest with similarity {round(course.get('similarity', 0), 2)}"
         })
 
-    # 🔥 Graph Data (ready for frontend)
+    # ------------------------------
+    # 🔥 GRAPH DATA
+    # ------------------------------
     graph_data = {
         "labels": [c["course_name"] for c in enhanced_results],
         "similarity_scores": [c["similarity"] for c in enhanced_results],
         "ratings": [c["rating"] for c in enhanced_results]
     }
 
+    # ------------------------------
+    # RESPONSE
+    # ------------------------------
     return jsonify({
         "success": True,
         "sentiment": sentiment,
         "total": len(enhanced_results),
-
-        # 🔥 Main Data
         "courses": enhanced_results,
-
-        # 🔥 Visualization Ready
         "graph_data": graph_data
     })
 
 
+# ------------------------------
+# RUN
+# ------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
