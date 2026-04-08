@@ -47,15 +47,26 @@ class SentimentAnalyzer:
 # ====================================================
 # ✅ REQUIRED BY app.py
 # ====================================================
-from textblob import TextBlob
+def analyze_sentiment(text: str) -> dict:
+    """
+    Simple sentiment API helper
+    """
+    if not text:
+        return {
+            "polarity": 0.0,
+            "label": "neutral"
+        }
 
-def analyze_sentiment(text):
-    blob = TextBlob(text)
-    polarity = blob.sentiment.polarity
+    polarity = TextBlob(text).sentiment.polarity
 
-    label = "positive" if polarity > 0 else "negative" if polarity < 0 else "neutral"
+    if polarity > 0.1:
+        label = "positive"
+    elif polarity < -0.1:
+        label = "negative"
+    else:
+        label = "neutral"
 
     return {
-        "label": label,
-        "polarity": polarity
+        "polarity": round(polarity, 3),
+        "label": label
     }
