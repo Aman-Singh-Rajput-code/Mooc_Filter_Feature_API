@@ -10,11 +10,12 @@ from sentiment_analyzer import analyze_sentiment
 # ------------------------------
 # NLTK (SAFE DOWNLOAD)
 # ------------------------------
+'''
 try:
     nltk.download("punkt", quiet=True)
     nltk.download("stopwords", quiet=True)
 except:
-    print("NLTK download skipped")
+    print("NLTK download skipped")'''
 
 # ------------------------------
 # APP INIT
