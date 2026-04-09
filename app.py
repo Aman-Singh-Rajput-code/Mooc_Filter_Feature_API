@@ -31,10 +31,12 @@ def health():
 @app.route("/filter-courses", methods=["POST"])
 def filter_courses():
     data = request.get_json()
+    print("DATA:", data)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
 
     processed = process_input(data)
+    print("PROCESSED:", processed)
     sentiment = analyze_sentiment(processed.get("course_name", ""))
 
     results = recommend_courses(
@@ -43,6 +45,7 @@ def filter_courses():
         sentiment=sentiment,
         top_n=data.get("top_n", 10)
     )
+    print("RESULTS:", results) 
 
     # 🔥 NEW: Transform results for visualization
     enhanced_results = []
