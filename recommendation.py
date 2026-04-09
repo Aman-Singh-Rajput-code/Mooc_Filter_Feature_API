@@ -114,7 +114,7 @@ class CourseRecommender:
 
         # 🔥 OPTIMIZATION: compute query vector once
         try:
-            q_vec = self.vectorizer.transform([f"{query} {user_comments}"])
+            q_vec = self.vectorizer.transform([f"{query} {user_comments} {query} {query}"])
         except Exception:
             q_vec = None
 
@@ -125,7 +125,7 @@ class CourseRecommender:
             try:
                 if q_vec is not None:
                     c_vec = self.vectorizer.transform(
-                        [f"{row['course_name']} {row.get('instructor', '')}"]
+                        [f"{row['course_name']} {row.get('instructor', '')} {row.get('combined_features', '')}"]
                     )
                     similarity = cosine_similarity(q_vec, c_vec)[0][0]
                 else:
