@@ -33,25 +33,25 @@ def extract_course_url(sources):
         return ""
 
     try:
-        if isinstance(sources, str):
-            parsed = ast.literal_eval(sources)
-        else:
-            parsed = sources
+        parsed = ast.literal_eval(sources) if isinstance(sources, str) else sources
 
-        if isinstance(parsed, list) and len(parsed) > 0:
-            if isinstance(parsed[0], str) and parsed[0].startswith("http"):
-                return parsed[0]
-    except Exception:
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, str) and item.startswith("http"):
+                    return item
+    except:
         pass
 
     return ""
 
 
-# 🔥 NEW: Skill Extraction
+# 🔥 Improved Skill Extraction
 def extract_skills(text):
     skills_list = [
         "python", "machine learning", "data science", "deep learning",
-        "sql", "excel", "ai", "nlp", "statistics", "power bi"
+        "html", "css", "javascript", "react", "node",
+        "web development", "frontend", "backend",
+        "cyber security", "network security", "sql", "excel"
     ]
 
     text = str(text).lower()
@@ -68,7 +68,7 @@ class CourseRecommender:
         self.sentiment_analyzer = SentimentAnalyzer(use_distilroberta=False)
 
         self.vectorizer = TfidfVectorizer(
-            max_features=1000,
+            max_features=1500,
             stop_words="english"
         )
 
@@ -91,79 +91,111 @@ class CourseRecommender:
             parsed = ast.literal_eval(comments)
             if isinstance(parsed, list):
                 return parsed
-        except Exception:
+        except:
             pass
 
         return [str(comments)]
 
     def get_recommendations(self, user_input, top_n=10):
-        query = user_input.get("course_name", "")
+        query = user_input.get("course_name", "").lower()
         is_paid = user_input.get("is_paid", "any").lower()
         min_rating = float(user_input.get("min_rating", 0.0))
         user_comments = user_input.get("user_comments", "")
 
         df = self.df.copy()
 
-        # 🔹 Apply Filters
+        # ------------------------------
+        # FILTERS
+        # ------------------------------
         if is_paid in ["paid", "free"]:
             df = df[df["is_paid"].str.lower() == is_paid]
 
         df = df[df["course_rating"] >= min_rating]
 
-        # 🔥 ADD HERE
+        # 🔥 SMART QUERY FILTER
         if query:
-            df = df[df["course_name"].str.lower().str.contains(query.lower(), na=False)]
+            keywords = query.split()
 
-        # ⚠️ IMPORTANT fallback
+            mask = df["combined_features"].apply(
+                lambda x: any(word in str(x).lower() for word in keywords)
+            )
+
+            df = df[mask]
+
+        # fallback
         if df.empty:
             df = self.df.copy()
 
         results = []
 
-        # 🔥 OPTIMIZATION: compute query vector once
+        # ------------------------------
+        # QUERY VECTOR
+        # ------------------------------
         try:
-            q_vec = self.vectorizer.transform([f"{query} {query} {query} {user_comments}"])
-        except Exception:
+            q_vec = self.vectorizer.transform(
+                [f"{query} {query} {query} {user_comments}"]
+            )
+        except:
             q_vec = None
 
+        # ------------------------------
+        # MAIN LOOP
+        # ------------------------------
         for _, row in df.iterrows():
-            rating = float(row["course_rating"])
+            rating = float(row.get("course_rating", 0))
 
-            # 🔥 Similarity Calculation
+            # 🔥 SIMILARITY
             try:
                 if q_vec is not None:
                     c_vec = self.vectorizer.transform(
-                        [f"{row['course_name']} {row.get('instructor', '')} {row.get('combined_features', '')}"]
+                        [str(row["combined_features"])]
                     )
                     similarity = cosine_similarity(q_vec, c_vec)[0][0]
                 else:
                     similarity = 0.2
-            except Exception:
+            except:
                 similarity = 0.2
 
-            # 🔥 Sentiment Calculation
+            # 🔥 KEYWORD BOOST
+            if any(word in str(row["combined_features"]).lower() for word in query.split()):
+                similarity += 0.2
+
+            similarity = min(similarity, 1.0)
+
+            # 🔥 SENTIMENT (IMPROVED)
             comments = self.parse_comments(row.get("user_comments", ""))
-            sentiment = (
-                self.sentiment_analyzer.get_sentiment_score(
-                    " ".join(comments[:5])
-                )
-                if comments else 0.5
+
+            text_for_sentiment = (
+                " ".join(comments[:5]) + " " +
+                str(row.get("course_name", "")) + " " +
+                str(row.get("combined_features", ""))[:200]
             )
 
-            # 🔥 Final Hybrid Score
+            try:
+                sentiment = self.sentiment_analyzer.get_sentiment_score(text_for_sentiment)
+                if sentiment is None:
+                    sentiment = 0.4
+            except:
+                sentiment = 0.4
+
+            # ------------------------------
+            # FINAL SCORE
+            # ------------------------------
             score = (
                 (rating / 5.0) * 0.30 +
                 similarity * 0.40 +
                 sentiment * 0.30
             )
 
-            # 🔥 Skill Extraction
-            skills = extract_skills(row["course_name"])
+            # 🔥 SKILLS
+            skills = extract_skills(row.get("combined_features", ""))
 
-            # 🔥 Result Object (Frontend Ready)
+            # ------------------------------
+            # RESULT OBJECT
+            # ------------------------------
             results.append({
-                "course_id": row["course_id"],
-                "title": row["course_name"],
+                "course_id": row.get("course_id", ""),
+                "title": row.get("course_name", ""),
                 "rating": round(rating, 2),
                 "instructor": row.get("instructor", "N/A"),
                 "platform": row.get("platform", "N/A"),
@@ -171,17 +203,17 @@ class CourseRecommender:
                 "enrollment": int(row.get("Number_of_student_enrolled", 0)),
                 "course_url": extract_course_url(row.get("sources")),
 
-                # 🔥 KEY FIELDS FOR VISUALIZATION
                 "similarity": round(float(similarity), 3),
-                "sentiment_score": round(sentiment, 3),
-                "final_score": round(score, 3),
+                "sentiment_score": round(float(sentiment), 3),
+                "final_score": round(float(score), 3),
                 "skills": skills,
 
-                # 🔥 Explainability (VIVA GOLD)
-                "why_recommended": f"Recommended because it matches your input with similarity {round(similarity,2)} and has rating {rating}"
+                "why_recommended": f"Recommended because it matches your query with similarity {round(similarity,2)} and has rating {rating}"
             })
 
-        # 🔥 Sort by final score
+        # ------------------------------
+        # SORT
+        # ------------------------------
         results.sort(key=lambda x: x["final_score"], reverse=True)
 
         return sanitize_json(results[:top_n])
