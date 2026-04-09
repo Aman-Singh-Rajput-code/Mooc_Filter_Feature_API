@@ -110,11 +110,19 @@ class CourseRecommender:
 
         df = df[df["course_rating"] >= min_rating]
 
+        # 🔥 ADD HERE
+        if query:
+            df = df[df["course_name"].str.lower().str.contains(query.lower(), na=False)]
+
+        # ⚠️ IMPORTANT fallback
+        if df.empty:
+            df = self.df.copy()
+
         results = []
 
         # 🔥 OPTIMIZATION: compute query vector once
         try:
-            q_vec = self.vectorizer.transform([f"{query} {user_comments} {query} {query}"])
+            q_vec = self.vectorizer.transform([f"{query} {query} {query} {user_comments}"])
         except Exception:
             q_vec = None
 
