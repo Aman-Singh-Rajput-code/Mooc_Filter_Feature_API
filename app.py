@@ -64,6 +64,7 @@ def filter_courses():
             # 🔥 Optional: extract skills (simple version)
             "skills": course.get("skills", []),
             "course_url": course.get("course_url", ""),
+            "sentiment_score": float(course.get("sentiment_score", 0)),
 
             "final_score": course.get("final_score", 0),
             
