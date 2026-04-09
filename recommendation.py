@@ -173,6 +173,7 @@ class CourseRecommender:
 
             try:
                 sentiment = self.sentiment_analyzer.get_sentiment_score(text_for_sentiment)
+                print("FINAL SENTIMENT:", sentiment)
                 if sentiment is None:
                     sentiment = 0.4
             except:
