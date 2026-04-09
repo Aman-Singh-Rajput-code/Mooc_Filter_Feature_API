@@ -92,9 +92,9 @@ class DataProcessor:
         df["user_comments"] = df.get("user_comments", "").fillna("")
 
         # 🔥 IMPORTANT FIELDS (CHECK EXISTENCE)
-        df["description"] = df.get("description", "").fillna("")
-        df["category"] = df.get("category", "").fillna("")
-        df["skills"] = df.get("skills", "").fillna("")
+        df["description"] = df["description"] if "description" in df.columns else pd.Series([""] * len(df))
+        df["category"] = df["category"] if "category" in df.columns else pd.Series([""] * len(df))
+        df["skills"] = df["skills"] if "skills" in df.columns else pd.Series([""] * len(df))
 
         # ------------------------------
         # OPTIONAL: PARSE SKILLS (if stored as list string)
