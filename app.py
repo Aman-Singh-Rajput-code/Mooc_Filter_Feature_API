@@ -48,15 +48,22 @@ def filter_courses():
     enhanced_results = []
 
     for course in results:
+        print("COURSE:", course)
         enhanced_results.append({
             "course_name": course.get("title", ""),
             "similarity": float(course.get("similarity", 0)),  # IMPORTANT
             "rating": float(course.get("rating", 0)),
+            "platform": course.get("platform", "N/A"),
+            "is_paid": course.get("is_paid", "Unknown"),
             "duration": course.get("duration", "N/A"),
             "level": course.get("level", "N/A"),
 
             # 🔥 Optional: extract skills (simple version)
             "skills": course.get("skills", []),
+            "course_url": course.get("course_url", ""),
+
+            "final_score": course.get("final_score", 0),
+            
 
             # 🔥 Explainability (VERY IMPORTANT)
             "why_recommended": f"Matches your interest with similarity score {round(course.get('similarity', 0), 2)}"
